@@ -1,0 +1,142 @@
+/*
+ * Cyber Gym — design tokens
+ * Trois couches :
+ *   1. Primitives  : la palette néon brute (--cg-*)
+ *   2. Sémantiques : rôles (surface, texte, action…) à utiliser dans les composants
+ *   3. Échelles     : typo fluide, espacements, rayons, tailles de cible, ombres « glow »
+ * Les tailles typographiques et la gouttière sont fluides (clamp) pour tenir de 279px à 480px+.
+ */
+:root {
+  /* ── 1. Primitives ───────────────────────────────────────────── */
+  --cg-ink-950: #08060d;
+  --cg-ink-900: #0e0b15;
+  --cg-ink-850: #14111d;
+  --cg-ink-700: #2c2640;
+  --cg-ink-600: #4a4263;
+  --cg-ink-300: #a9a1bd;
+
+  --cg-yellow: #fff03a;
+  --cg-violet: #b95cff;
+  --cg-violet-light: #d6a6ff;
+  --cg-pink: #ff4fb8;
+  --cg-cyan: #2de2e6;
+  --cg-green: #3dff8f;
+
+  /* triplets RGB pour les transparences : rgb(var(--rgb-violet) / .4) */
+  --rgb-yellow: 255 240 58;
+  --rgb-violet: 185 92 255;
+  --rgb-pink: 255 79 184;
+  --rgb-cyan: 45 226 230;
+  --rgb-green: 61 255 143;
+
+  /* ── 2. Sémantiques ──────────────────────────────────────────── */
+  --color-bg: var(--cg-ink-950);
+  --color-bg-raised: var(--cg-ink-900); /* barre de navigation, feuilles */
+  --color-surface: var(--cg-ink-850); /* cartes */
+  --color-border: var(--cg-ink-700);
+  --color-border-strong: var(--cg-ink-600);
+  --color-text: var(--cg-yellow);
+  --color-text-muted: var(--cg-ink-300);
+  --color-text-inverse: var(--cg-ink-950);
+  --color-primary: var(--cg-violet); /* sélection, focus, élément courant */
+  --color-action: var(--cg-green); /* CTA principal, succès, records */
+  --color-danger: var(--cg-pink);
+  --color-info: var(--cg-cyan);
+  --rgb-primary: var(--rgb-violet);
+  --rgb-action: var(--rgb-green);
+
+  --bg-app:
+    radial-gradient(95% 42% at 100% 0%, rgb(var(--rgb-pink) / 0.2), rgb(var(--rgb-pink) / 0) 64%),
+    radial-gradient(95% 42% at 0% 0%, rgb(var(--rgb-cyan) / 0.15), rgb(var(--rgb-cyan) / 0) 64%),
+    var(--color-bg);
+
+  /* ── 3. Typographie ──────────────────────────────────────────── */
+  --font-body: 'Barlow', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-display: 'Barlow Condensed', 'Arial Narrow', sans-serif;
+
+  /* display = Barlow Condensed italique, majuscules */
+  --fs-display-xl: clamp(3.5rem, 22vw, 5.5rem); /* 88 — chiffre héros */
+  --fs-display-l: clamp(2.75rem, 17vw, 4.25rem); /* 68 — séance du jour */
+  --fs-display-m: clamp(2rem, 11.5vw, 2.875rem); /* 46 — titre de page */
+  --fs-display-s: clamp(1.875rem, 11vw, 2.75rem); /* 44 — titre d'exercice */
+  --fs-timer: clamp(1.875rem, 9.5vw, 2.375rem); /* 38 — minuteur de repos */
+  --fs-title: clamp(1.25rem, 6.6vw, 1.625rem); /* 26 — titre de ligne */
+  --fs-stat: clamp(1.5rem, 8.2vw, 2rem); /* 32 — valeur de stat */
+  --fs-number: clamp(1.25rem, 6.2vw, 1.5rem); /* 24 — saisie charge/rép. */
+  --fs-cta: clamp(1.125rem, 5.6vw, 1.375rem); /* 22 — bouton principal */
+
+  /* texte = Barlow */
+  --fs-body-l: 1rem; /* 16 */
+  --fs-body: 0.9375rem; /* 15 */
+  --fs-body-s: 0.875rem; /* 14 */
+  --fs-label: 0.75rem; /* 12 — sur-titres en capitales */
+  --fs-micro: 0.6875rem; /* 11 — barre de navigation */
+
+  --lh-tight: 1;
+  --lh-snug: 1.2;
+  --lh-body: 1.4;
+  --tracking-label: 0.14em;
+  --tracking-caps: 0.1em;
+
+  /* ── Espacements (base 4) ────────────────────────────────────── */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --gutter: clamp(12px, 5.2vw, 20px); /* marge latérale de page */
+  --stack: clamp(16px, 5.6vw, 22px); /* espace entre sections */
+
+  /* ── Rayons ──────────────────────────────────────────────────── */
+  --radius-s: 10px;
+  --radius-m: 14px;
+  --radius-l: 18px;
+  --radius-xl: 20px;
+  --radius-pill: 999px;
+
+  /* ── Tailles ─────────────────────────────────────────────────── */
+  --tap: 44px; /* cible tactile minimale */
+  --control-l: 56px; /* CTA principal */
+  --control-m: 52px;
+  --row-h: clamp(64px, 19vw, 72px);
+  --tile-s: clamp(40px, 12.5vw, 48px);
+  --tile-m: clamp(48px, 15.5vw, 60px);
+  --tile-l: clamp(52px, 16.5vw, 64px);
+  --nav-h: 64px;
+  --content-max: 520px;
+
+  /* ── Effets néon ─────────────────────────────────────────────── */
+  --glow-s: 0 0 12px;
+  --glow-m: 0 0 18px;
+  --glow-l: 0 0 28px;
+  --border-w: 1px;
+  --border-w-accent: 1.5px;
+
+  /* ── Mouvement ───────────────────────────────────────────────── */
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --dur-fast: 120ms;
+  --dur: 220ms;
+
+  /* ── Zones sûres (encoche, barre d'accueil) ──────────────────── */
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-left: env(safe-area-inset-left, 0px);
+  --safe-right: env(safe-area-inset-right, 0px);
+
+  /* accent par défaut des composants (surchargé par .accent-*) */
+  --accent: var(--cg-violet);
+  --rgb-accent: var(--rgb-violet);
+}
+
+/* Accents : chaque séance type porte une couleur, propagée aux composants enfants */
+.accent-violet { --accent: var(--cg-violet); --rgb-accent: var(--rgb-violet); }
+.accent-pink { --accent: var(--cg-pink); --rgb-accent: var(--rgb-pink); }
+.accent-cyan { --accent: var(--cg-cyan); --rgb-accent: var(--rgb-cyan); }
+.accent-green { --accent: var(--cg-green); --rgb-accent: var(--rgb-green); }
+.accent-yellow { --accent: var(--cg-yellow); --rgb-accent: var(--rgb-yellow); }
+
+@media (prefers-reduced-motion: reduce) {
+  :root { --dur-fast: 0ms; --dur: 0ms; }
+}

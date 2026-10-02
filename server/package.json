@@ -1,0 +1,15 @@
+{
+  "name": "cyber-gym-server",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "PORT=${API_PORT:-3000} node --watch-path=src --watch-path=migrations src/index.js",
+    "start": "node src/index.js",
+    "demo": "node src/demo.js"
+  },
+  "dependencies": {
+    "@electric-sql/pglite": "^0.5.8",
+    "express": "^5.2.1",
+    "pg": "^8.23.1"
+  }
+}

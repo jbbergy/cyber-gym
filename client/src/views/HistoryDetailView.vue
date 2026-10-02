@@ -1,0 +1,132 @@
+<script setup>
+import { computed, onMounted, ref } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
+import { CgBadge, CgButton, CgCard, CgDialog, CgIcon, CgIconButton, CgIconTile, CgPageHeader, CgStat } from '../ds'
+import { api } from '../lib/api'
+import { durationMinutes, formatDayDate, formatInt, formatNumber, formatTime } from '../lib/format'
+import { toast } from '../lib/toast'
+
+const route = useRoute()
+const router = useRouter()
+const session = ref(null)
+const confirmDelete = ref(false)
+
+onMounted(async () => {
+  try {
+    session.value = await api.session(route.params.id)
+    if (!session.value.endedAt) router.replace(`/seance/${session.value.id}`)
+  } catch (err) {
+    toast(err, { tone: 'danger' })
+    router.replace('/historique')
+  }
+})
+
+const exercises = computed(() =>
+  (session.value?.exercises ?? []).map((e) => {
+    const done = e.sets.filter((s) => s.doneAt)
+    const top = Math.max(...done.map((s) => s.weight ?? 0))
+    return {
+      ...e,
+      done,
+      volume: done.reduce((a, s) => a + (s.weight ?? 0) * (s.reps ?? 0), 0),
+      record: e.previousBest !== null && top > e.previousBest,
+      top,
+    }
+  }),
+)
+
+const savingPreset = ref(false)
+async function saveAsPreset() {
+  savingPreset.value = true
+  try {
+    const t = await api.templateFromSession(session.value.id)
+    toast('Preset créé : ajuste-le si besoin', { tone: 'success' })
+    router.push(`/programmes/${t.id}`)
+  } catch (err) {
+    toast(err, { tone: 'danger' })
+  } finally {
+    savingPreset.value = false
+  }
+}
+
+async function remove() {
+  try {
+    await api.deleteSession(session.value.id)
+    toast('Séance supprimée')
+    router.replace('/historique')
+  } catch (err) {
+    toast(err, { tone: 'danger' })
+  }
+}
+</script>
+
+<template>
+  <main v-if="session" class="page" :class="`accent-${session.color}`">
+    <CgPageHeader
+      :eyebrow="`${formatDayDate(session.startedAt)} · ${formatTime(session.startedAt)}`"
+      :title="session.name"
+      :subtitle="session.muscles || null"
+    >
+      <template #actions>
+        <CgIconButton icon="chevron-left" label="Retour à l'historique" to="/historique" />
+      </template>
+    </CgPageHeader>
+
+    <div class="stats">
+      <CgStat class="accent-cyan" label="Durée" :value="`${durationMinutes(session.startedAt, session.endedAt)} min`" />
+      <CgStat class="accent-pink" label="Volume" :value="`${formatInt(session.volume)} kg`" />
+      <CgStat class="accent-violet" label="Séries" :value="session.setsDone" />
+      <CgStat class="accent-green" label="Records" :value="session.records" />
+    </div>
+
+    <CgCard v-for="e in exercises" :key="e.id" padding="s">
+      <div class="ex-head">
+        <CgIconTile :icon="e.icon" />
+        <div class="grow">
+          <div class="row row--wrap ex-title">
+            <span class="ex-name">{{ e.name }}</span>
+            <CgBadge v-if="e.record" tone="success">Record</CgBadge>
+          </div>
+          <div class="t-muted ex-meta">{{ formatInt(e.volume) }} kg · max {{ formatNumber(e.top) }} kg</div>
+        </div>
+      </div>
+      <ol class="sets">
+        <li v-for="s in e.done" :key="s.id" class="sets__item">
+          <span class="t-num sets__n">{{ s.setNumber }}</span>
+          <span class="t-num sets__v">{{ formatNumber(s.weight) }} <small>kg</small> × {{ s.reps }}</span>
+          <CgIcon v-if="e.record && s.weight === e.top" name="trophy" :size="16" class="sets__pr" label="Record" />
+        </li>
+      </ol>
+    </CgCard>
+
+    <CgButton variant="outline" size="m" icon="bookmark" block :loading="savingPreset" @click="saveAsPreset">
+      Enregistrer comme preset
+    </CgButton>
+    <CgButton variant="ghost" size="s" icon="trash" class="danger" @click="confirmDelete = true">Supprimer cette séance</CgButton>
+
+    <CgDialog :open="confirmDelete" title="Supprimer ?" description="Cette séance et ses séries seront définitivement effacées." @close="confirmDelete = false">
+      <template #actions>
+        <CgButton variant="secondary" size="m" @click="confirmDelete = false">Annuler</CgButton>
+        <CgButton variant="danger" size="m" @click="remove">Supprimer</CgButton>
+      </template>
+    </CgDialog>
+  </main>
+</template>
+
+<style scoped>
+.stats { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-3); }
+.ex-head { display: flex; align-items: center; gap: var(--space-3); }
+.ex-title { gap: var(--space-2); }
+.ex-name { font-weight: 700; font-size: var(--fs-body-l); line-height: 1.25; }
+.ex-meta { font-size: var(--fs-body-s); }
+.sets { margin: 0; padding: 0; list-style: none; }
+.sets__item { display: flex; align-items: center; gap: var(--space-3); min-height: 36px; border-top: var(--border-w) solid var(--color-border); }
+.sets__n { width: 24px; text-align: center; color: var(--color-text-muted); font-size: 1.125rem; }
+.sets__v { font-size: 1.25rem; }
+.sets__v small { font-size: 0.8rem; color: var(--color-text-muted); }
+.sets__pr { color: var(--color-action); }
+.danger { --accent: var(--color-danger); align-self: center; }
+@media (max-width: 300px) {
+  .stats { gap: var(--space-2); }
+}
+</style>
