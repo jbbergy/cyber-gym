@@ -10,11 +10,19 @@ PWA de suivi de musculation construite à partir des maquettes « Suivi musculat
 
 ```bash
 npm install
-npm run db:demo   # optionnel : 8 semaines d'historique de démo (serveur arrêté)
+npm run db:demo   # optionnel : 8 semaines d'historique de démo sur le compte de test (serveur arrêté)
 npm run dev       # API sur :3000 + Vite sur :5173
 ```
 
-Ouvrir http://localhost:5173. Au premier lancement, la base est migrée et un programme Push / Pull / Legs est créé.
+Ouvrir http://localhost:5173 et se connecter (ou créer un compte). Au premier lancement, la base est migrée et le compte de test est créé.
+
+### Compte de test (local uniquement)
+
+| E-mail                | Mot de passe    |
+| --------------------- | --------------- |
+| `test@cybergym.local` | `cybergym-test` |
+
+Créé au démarrage du serveur quand `NODE_ENV` ≠ `production` ; un bouton « Compte de test (local) » remplit le formulaire de connexion en dev. En production il n'est jamais créé, et la connexion comme la réinitialisation sont refusées pour cette adresse même si elle existait en base. Les identifiants sont définis dans `server/src/accounts.js`.
 
 ### Production
 
@@ -29,10 +37,15 @@ npm start         # Express sert l'API et la PWA compilée sur :3000
 | `PGLITE_DIR`    | Dossier des données PGlite (relatif à `server/`)                    | `data/pgdata`   |
 | `PORT` / `HOST` | Écoute du serveur                                                   | `3000` / `127.0.0.1` |
 | `API_PORT`      | Port de l'API en dev (utilisé aussi par le proxy Vite)              | `3000`          |
-| `DEMO=1`        | Génère l'historique de démo au démarrage si aucune séance n'existe  | —               |
+| `DEMO=1`        | Génère l'historique de démo du compte de test au démarrage s'il n'a aucune séance (hors production) | — |
+| `OWNER_EMAIL`   | Compte qui reçoit les données créées avant l'arrivée des comptes (voir « Comptes ») | compte de test hors production |
+| `APP_URL`       | URL publique utilisée dans le lien « mot de passe oublié »          | origine de la requête |
+| `SMTP_HOST`     | Relais SMTP (Brevo : `smtp-relay.brevo.com`) ; sans lui, le lien « mot de passe oublié » est écrit dans les logs | — |
+| `SMTP_PORT` / `SMTP_USER` / `SMTP_PASSWORD` | Port (587 STARTTLS, 465 TLS) et identifiants du relais | `587` |
+| `MAIL_FROM`     | Expéditeur (adresse d'un domaine authentifié chez Brevo)             | `Cyber Gym <no-reply@localhost>` |
 
 > PGlite n'accepte qu'un processus à la fois sur un même dossier : arrêter le serveur avant `npm run db:demo`.
-> Pour installer la PWA sur un téléphone, elle doit être servie en HTTPS (reverse proxy type Caddy/Traefik). L'API n'a pas d'authentification : à garder sur un réseau privé ou derrière un proxy authentifié.
+> Pour installer la PWA sur un téléphone, elle doit être servie en HTTPS (reverse proxy type Caddy/Traefik).
 
 ## Déploiement (Docker, gym.jibhey.fr)
 
@@ -50,7 +63,16 @@ scripts/server-setup.sh   # une seule fois (idempotent) : dossier, base + rôle,
 
 Sur le serveur, les fichiers sont dans `/srv/apps/cyber-gym`. Le `.env`, avec le mot de passe de base généré sur place, ne quitte jamais le serveur. Logs : `ssh jibhey.fr docker logs -f cyber-gym`.
 
-> ⚠️ L'application est publique et sans authentification : toute personne qui connaît l'adresse peut lire et modifier les données.
+En production, ajouter au `.env` du serveur `OWNER_EMAIL` (rattachement des données existantes), `APP_URL=https://gym.jibhey.fr` et le relais Brevo (`SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`, `MAIL_FROM`), le même que holyspoon.
+
+## Comptes
+
+- **Inscription** (nom, e-mail, mot de passe ≥ 8 caractères) sans activation par e-mail : le compte est utilisable immédiatement, avec son propre catalogue d'exercices et le programme Push / Pull / Legs de départ.
+- **Connexion** : session par cookie `HttpOnly`, `SameSite=Lax` (`Secure` en production), valable 90 jours. Mots de passe hachés avec scrypt (module `crypto` de Node). Tentatives limitées par IP sur connexion, inscription et oubli.
+- **Mot de passe oublié** : lien à usage unique valable 1 h, envoyé par e-mail (relais SMTP Brevo) ; la réponse est identique que l'adresse existe ou non. En local sans SMTP, le lien est affiché dans les logs et proposé directement à l'écran. Un nouveau mot de passe déconnecte tous les appareils.
+- **Profil** (`/profil`, icône en haut de « Aujourd'hui ») : nom, e-mail, changement de mot de passe (déconnecte les autres appareils), déconnexion (vide la file hors-ligne et le cache d'API de l'appareil).
+- **Cloisonnement** : exercices, presets et séances portent un `user_id` ; chaque route de l'API filtre sur le compte connecté.
+- **Données existantes** : la migration `003_users.sql` laisse les données d'avant les comptes sans propriétaire (invisibles), puis elles sont rattachées au compte `OWNER_EMAIL` — dès sa création, ou au démarrage s'il existe déjà. Hors production, à défaut d'`OWNER_EMAIL`, c'est le compte de test qui les reçoit. Tant que des données attendent, l'adresse propriétaire ne peut pas être prise par un changement d'e-mail ; créer le compte propriétaire juste après le déploiement.
 
 ## Fonctionnalités
 

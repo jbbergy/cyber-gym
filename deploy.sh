@@ -19,6 +19,7 @@ rsync -az --delete \
   --exclude client/dev-dist \
   --exclude server/data \
   --exclude .env \
+  --exclude '.env.bak-*' \
   --exclude .DS_Store \
   ./ "$SERVER:$DEST/"
 

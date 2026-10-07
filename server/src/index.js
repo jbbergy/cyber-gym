@@ -4,8 +4,10 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { createDb, migrate } from './db.js'
 import { HttpError } from './http.js'
-import { seedIfEmpty, syncCatalog } from './seed.js'
+import { DEV_ACCOUNT, bootstrapAccounts, userIdOf } from './accounts.js'
+import { loadUser, requireUser } from './auth.js'
 import { seedDemo } from './demo.js'
+import authRouter from './routes/auth.js'
 import templatesRouter from './routes/templates.js'
 import exercisesRouter from './routes/exercises.js'
 import sessionsRouter from './routes/sessions.js'
@@ -17,19 +19,24 @@ const clientDist = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '.
 
 const db = await createDb()
 await migrate(db)
-await seedIfEmpty(db)
-await syncCatalog(db)
-if (process.env.DEMO === '1') {
-  const { rows } = await db.query('SELECT count(*)::int AS n FROM sessions')
-  if (rows[0].n === 0) console.log(`[demo] ${await seedDemo(db)} séances générées`)
+await bootstrapAccounts(db)
+if (process.env.DEMO === '1' && process.env.NODE_ENV !== 'production') {
+  const userId = await userIdOf(db, DEV_ACCOUNT.email)
+  const { rows } = await db.query('SELECT count(*)::int AS n FROM sessions WHERE user_id = $1', [userId])
+  if (rows[0].n === 0) console.log(`[demo] ${await seedDemo(db, userId)} séances générées`)
 }
 
 const app = express()
 app.disable('x-powered-by')
+// derrière Caddy : IP réelle du client pour la limitation des tentatives de connexion
+app.set('trust proxy', 'loopback, uniquelocal')
 app.use(express.json({ limit: '100kb' }))
 
 const api = express.Router()
 api.get('/health', (_req, res) => res.json({ ok: true, db: db.kind }))
+api.use(loadUser(db))
+api.use(authRouter(db))
+api.use(requireUser)
 api.use(exercisesRouter(db))
 api.use(templatesRouter(db))
 api.use(sessionsRouter(db))

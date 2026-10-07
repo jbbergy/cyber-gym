@@ -2,6 +2,9 @@
 defineProps({
   modelValue: { type: String, default: '' },
   label: { type: String, required: true },
+  /** text · email · password */
+  type: { type: String, default: 'text' },
+  autocomplete: { type: String, default: 'off' },
   hideLabel: Boolean,
   placeholder: { type: String, default: '' },
   maxlength: { type: Number, default: 80 },
@@ -16,13 +19,15 @@ defineEmits(['update:modelValue'])
     <span :class="hideLabel ? 'sr-only' : 't-label'">{{ label }}</span>
     <input
       class="cg-input"
-      type="text"
+      :type="type"
       :value="modelValue"
       :placeholder="placeholder"
       :maxlength="maxlength"
       :list="list || undefined"
       :required="required"
-      autocomplete="off"
+      :autocomplete="autocomplete"
+      :autocapitalize="type === 'text' ? undefined : 'off'"
+      :spellcheck="type === 'text' ? undefined : 'false'"
       @input="$emit('update:modelValue', $event.target.value)"
     />
   </label>

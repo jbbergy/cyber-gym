@@ -5,13 +5,15 @@ export default function progressionRouter(db) {
   const r = Router()
 
   // Exercices ayant au moins une séance terminée, les plus pratiqués d'abord
-  r.get('/progression', async (_req, res) => {
+  r.get('/progression', async (req, res) => {
     const { rows } = await db.query(
       `SELECT e.id, e.name, e.icon, count(*)::int AS sessions, max(t.started_at) AS "lastAt",
          (SELECT s.color FROM sessions s JOIN session_exercises se ON se.session_id = s.id
           WHERE se.exercise_id = e.id ORDER BY s.started_at DESC LIMIT 1) AS color
        FROM exercise_tops t JOIN exercises e ON e.id = t.exercise_id
+       WHERE e.user_id = $1
        GROUP BY e.id ORDER BY sessions DESC, "lastAt" DESC`,
+      [req.user.id],
     )
     res.json(rows)
   })
@@ -19,7 +21,7 @@ export default function progressionRouter(db) {
   r.get('/progression/:exerciseId', async (req, res) => {
     const exerciseId = uuid(req.params.exerciseId)
     const limit = int(req.query.limit ?? 12, 'limit', { min: 2, max: 100 })
-    const ex = await db.query('SELECT id, name, icon FROM exercises WHERE id = $1', [exerciseId])
+    const ex = await db.query('SELECT id, name, icon FROM exercises WHERE id = $1 AND user_id = $2', [exerciseId, req.user.id])
     if (!ex.rows[0]) throw new HttpError(404, 'Exercice introuvable')
 
     const { rows: points } = await db.query(

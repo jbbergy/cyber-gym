@@ -45,6 +45,8 @@ export const UI_ICONS = {
   search: c(11, 11, 7) + p('M16.5 16.5 21 21'),
   copy: p('M8 8h12v12H8zM16 8V4H4v12h4'),
   bookmark: p('M6 3h12v18l-6-4-6 4z'),
+  user: c(12, 8, 4) + p('M4 21a8 8 0 0 1 16 0'),
+  logout: p('M15 4h4v16h-4M10 8l-4 4 4 4M6 12h11'),
 }
 
 export const FILLED_ICONS = {

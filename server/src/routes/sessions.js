@@ -38,13 +38,13 @@ LEFT JOIN recs r ON r.session_id = s.id
 export default function sessionsRouter(db) {
   const r = Router()
 
-  async function summary(id) {
-    const { rows } = await db.query(`${SUMMARY_SQL} WHERE s.id = $1`, [id])
+  async function summary(userId, id) {
+    const { rows } = await db.query(`${SUMMARY_SQL} WHERE s.id = $1 AND s.user_id = $2`, [id, userId])
     return rows[0] ?? null
   }
 
-  async function detail(id) {
-    const s = await summary(id)
+  async function detail(userId, id) {
+    const s = await summary(userId, id)
     if (!s) throw new HttpError(404, 'Séance introuvable')
     const { rows: exercises } = await db.query(
       `SELECT se.id, se.exercise_id AS "exerciseId", e.name, e.icon, e.muscle, se.position,
@@ -104,30 +104,30 @@ export default function sessionsRouter(db) {
     const limit = int(req.query.limit ?? 50, 'limit', { min: 1, max: 200 })
     const { rows } = await db.query(
       `${SUMMARY_SQL}
-       WHERE s.ended_at IS NOT NULL
+       WHERE s.user_id = $4 AND s.ended_at IS NOT NULL
          AND ($1::timestamptz IS NULL OR s.started_at >= $1)
          AND ($2::timestamptz IS NULL OR s.started_at < $2)
        ORDER BY s.started_at DESC LIMIT $3`,
-      [from, to, limit],
+      [from, to, limit, req.user.id],
     )
     res.json(rows)
   })
 
-  r.get('/sessions/active', async (_req, res) => {
-    const { rows } = await db.query(`${SUMMARY_SQL} WHERE s.ended_at IS NULL LIMIT 1`)
+  r.get('/sessions/active', async (req, res) => {
+    const { rows } = await db.query(`${SUMMARY_SQL} WHERE s.user_id = $1 AND s.ended_at IS NULL LIMIT 1`, [req.user.id])
     res.json(rows[0] ?? null)
   })
 
   r.get('/sessions/:id', async (req, res) => {
-    res.json(await detail(uuid(req.params.id)))
+    res.json(await detail(req.user.id, uuid(req.params.id)))
   })
 
   // Ajoute un exercice à une séance, séries pré-remplies avec les charges de la dernière fois
-  async function addExercise(tx, sessionId, position, ex) {
+  async function addExercise(tx, userId, sessionId, position, ex) {
     const se = await tx.query(
       `INSERT INTO session_exercises (session_id, exercise_id, position, target_sets, target_reps, rest_seconds)
-       SELECT $1, e.id, $3, $4, $5, $6 FROM exercises e WHERE e.id = $2 RETURNING id`,
-      [sessionId, ex.exerciseId, position, ex.sets, ex.reps, ex.restSeconds],
+       SELECT $1, e.id, $3, $4, $5, $6 FROM exercises e WHERE e.id = $2 AND e.user_id = $7 RETURNING id`,
+      [sessionId, ex.exerciseId, position, ex.sets, ex.reps, ex.restSeconds, userId],
     )
     if (!se.rows[0]) throw new HttpError(400, 'Exercice introuvable dans le catalogue')
     const { rows: prev } = await tx.query(
@@ -165,13 +165,14 @@ export default function sessionsRouter(db) {
     const free = templateId ? null : (Array.isArray(body.exercises) ? body.exercises : []).map(parseExercise)
     if (free && !free.length) throw new HttpError(400, 'Choisis au moins un exercice')
     if (free && free.length > 30) throw new HttpError(400, '30 exercices maximum')
+    const userId = req.user.id
     const id = await db.tx(async (tx) => {
-      const active = await tx.query('SELECT id FROM sessions WHERE ended_at IS NULL')
+      const active = await tx.query('SELECT id FROM sessions WHERE user_id = $1 AND ended_at IS NULL', [userId])
       if (active.rows[0]) throw new HttpError(409, 'Une séance est déjà en cours', { activeId: active.rows[0].id })
       let meta = { name: text(body.name ?? 'Séance libre', 'Nom', { min: 1, max: 40 }), muscles: '', color: 'green', icon: 'dumbbell' }
       let exercises = free
       if (templateId) {
-        const t = await tx.query('SELECT * FROM templates WHERE id = $1', [templateId])
+        const t = await tx.query('SELECT * FROM templates WHERE id = $1 AND user_id = $2', [templateId, userId])
         if (!t.rows[0]) throw new HttpError(404, 'Séance type introuvable')
         meta = t.rows[0]
         const { rows } = await tx.query(
@@ -182,13 +183,13 @@ export default function sessionsRouter(db) {
         exercises = rows
       }
       const s = await tx.query(
-        `INSERT INTO sessions (template_id, name, muscles, color, icon) VALUES ($1, $2, $3, $4, $5) RETURNING id`,
-        [templateId, meta.name, meta.muscles, meta.color, meta.icon],
+        `INSERT INTO sessions (user_id, template_id, name, muscles, color, icon) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id`,
+        [userId, templateId, meta.name, meta.muscles, meta.color, meta.icon],
       )
-      for (const [position, ex] of exercises.entries()) await addExercise(tx, s.rows[0].id, position, ex)
+      for (const [position, ex] of exercises.entries()) await addExercise(tx, userId, s.rows[0].id, position, ex)
       return s.rows[0].id
     })
-    res.status(201).json(await detail(id))
+    res.status(201).json(await detail(userId, id))
   })
 
   // Ajoute un exercice en fin de séance, ou en remplace un (replaceId) à la même place
@@ -196,8 +197,9 @@ export default function sessionsRouter(db) {
     const id = uuid(req.params.id)
     const ex = parseExercise(req.body)
     const replaceId = req.body?.replaceId ? uuid(req.body.replaceId, 'replaceId') : null
+    const userId = req.user.id
     const newId = await db.tx(async (tx) => {
-      const s = await tx.query('SELECT id FROM sessions WHERE id = $1', [id])
+      const s = await tx.query('SELECT id FROM sessions WHERE id = $1 AND user_id = $2', [id, userId])
       if (!s.rows[0]) throw new HttpError(404, 'Séance introuvable')
       let position
       if (replaceId) {
@@ -215,14 +217,18 @@ export default function sessionsRouter(db) {
         const p = await tx.query('SELECT COALESCE(max(position) + 1, 0)::int AS p FROM session_exercises WHERE session_id = $1', [id])
         position = p.rows[0].p
       }
-      return addExercise(tx, id, position, ex)
+      return addExercise(tx, userId, id, position, ex)
     })
-    const d = await detail(id)
+    const d = await detail(userId, id)
     res.status(201).json(d.exercises.find((e) => e.id === newId))
   })
 
   r.delete('/session-exercises/:id', async (req, res) => {
-    await db.query('DELETE FROM session_exercises WHERE id = $1', [uuid(req.params.id)])
+    await db.query(
+      `DELETE FROM session_exercises se USING sessions s
+       WHERE se.id = $1 AND s.id = se.session_id AND s.user_id = $2`,
+      [uuid(req.params.id), req.user.id],
+    )
     res.status(204).end()
   })
 
@@ -231,7 +237,7 @@ export default function sessionsRouter(db) {
     const id = uuid(req.params.id)
     const endedAt = date(req.body?.endedAt, 'endedAt')
     const result = await db.tx(async (tx) => {
-      const found = await tx.query('SELECT id FROM sessions WHERE id = $1', [id])
+      const found = await tx.query('SELECT id FROM sessions WHERE id = $1 AND user_id = $2', [id, req.user.id])
       if (!found.rows[0]) throw new HttpError(404, 'Séance introuvable')
       await tx.query(
         `DELETE FROM session_sets ss USING session_exercises se
@@ -251,11 +257,11 @@ export default function sessionsRouter(db) {
       await tx.query('UPDATE sessions SET ended_at = COALESCE(ended_at, $2::timestamptz, now()) WHERE id = $1', [id, endedAt])
       return { deleted: false }
     })
-    res.json(result.deleted ? { id, deleted: true } : await summary(id))
+    res.json(result.deleted ? { id, deleted: true } : await summary(req.user.id, id))
   })
 
   r.delete('/sessions/:id', async (req, res) => {
-    await db.query('DELETE FROM sessions WHERE id = $1', [uuid(req.params.id)])
+    await db.query('DELETE FROM sessions WHERE id = $1 AND user_id = $2', [uuid(req.params.id), req.user.id])
     res.status(204).end()
   })
 
@@ -268,10 +274,13 @@ export default function sessionsRouter(db) {
     const { rows } = await db.query(
       `INSERT INTO session_sets (id, session_exercise_id, set_number, weight, reps, done_at)
        SELECT $1, se.id, $3, $4, $5, CASE WHEN $6::boolean THEN COALESCE($7::timestamptz, now()) END
-       FROM session_exercises se WHERE se.id = $2
+       FROM session_exercises se JOIN sessions s ON s.id = se.session_id AND s.user_id = $8
+       WHERE se.id = $2
        ON CONFLICT (id) DO UPDATE SET
          set_number = EXCLUDED.set_number, weight = EXCLUDED.weight, reps = EXCLUDED.reps,
          done_at = CASE WHEN $6::boolean THEN COALESCE(session_sets.done_at, EXCLUDED.done_at) END
+       -- l'exercice de séance vient d'être vérifié comme appartenant au compte : on n'écrase que ses séries
+       WHERE session_sets.session_exercise_id = EXCLUDED.session_exercise_id
        RETURNING id, session_exercise_id AS "sessionExerciseId", set_number AS "setNumber", weight, reps, done_at AS "doneAt"`,
       [
         id,
@@ -281,6 +290,7 @@ export default function sessionsRouter(db) {
         int(b.reps, 'Répétitions', { min: 0, max: 500, nullable: true }),
         done,
         date(b.doneAt, 'doneAt'),
+        req.user.id,
       ],
     )
     if (!rows[0]) throw new HttpError(404, 'Exercice de séance introuvable')
@@ -288,7 +298,11 @@ export default function sessionsRouter(db) {
   })
 
   r.delete('/sets/:id', async (req, res) => {
-    await db.query('DELETE FROM session_sets WHERE id = $1', [uuid(req.params.id)])
+    await db.query(
+      `DELETE FROM session_sets ss USING session_exercises se, sessions s
+       WHERE ss.id = $1 AND se.id = ss.session_exercise_id AND s.id = se.session_id AND s.user_id = $2`,
+      [uuid(req.params.id), req.user.id],
+    )
     res.status(204).end()
   })
 

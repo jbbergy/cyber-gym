@@ -1,9 +1,9 @@
-// Génère ~8 semaines d'historique Push / Pull / Legs pour la démo.
+// Génère ~8 semaines d'historique Push / Pull / Legs pour la démo, sur le compte de test local.
 // Usage : `npm run db:demo` (serveur arrêté : PGlite n'accepte qu'un processus à la fois)
 // ou `DEMO=1 npm run dev` (appliqué au démarrage si l'historique est vide).
 import { pathToFileURL } from 'node:url'
 import { createDb, migrate } from './db.js'
-import { seedIfEmpty } from './seed.js'
+import { DEV_ACCOUNT, bootstrapAccounts, userIdOf } from './accounts.js'
 
 // charge de départ, incrément, kg arrondis à
 const LOADS = {
@@ -26,15 +26,18 @@ const LOADS = {
   'Extensions mollets debout': [60, 5],
 }
 
-export async function seedDemo(db, { weeks = 8, now = new Date() } = {}) {
-  const { rows: templates } = await db.query('SELECT * FROM templates WHERE weekday IS NOT NULL ORDER BY weekday')
+export async function seedDemo(db, userId, { weeks = 8, now = new Date() } = {}) {
+  const { rows: templates } = await db.query(
+    'SELECT * FROM templates WHERE user_id = $1 AND weekday IS NOT NULL ORDER BY weekday',
+    [userId],
+  )
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
   const first = new Date(today)
   first.setDate(first.getDate() - weeks * 7)
   let count = 0
 
   await db.tx(async (tx) => {
-    await tx.query('DELETE FROM sessions')
+    await tx.query('DELETE FROM sessions WHERE user_id = $1', [userId])
     for (let d = new Date(first); d < today; d.setDate(d.getDate() + 1)) {
       const iso = ((d.getDay() + 6) % 7) + 1
       const t = templates.find((x) => x.weekday === iso)
@@ -45,9 +48,9 @@ export async function seedDemo(db, { weeks = 8, now = new Date() } = {}) {
       const duration = 48 + ((count * 5) % 14)
       const end = new Date(start.getTime() + duration * 60000)
       const s = await tx.query(
-        `INSERT INTO sessions (template_id, name, muscles, color, icon, started_at, ended_at)
-         VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id`,
-        [t.id, t.name, t.muscles, t.color, t.icon, start.toISOString(), end.toISOString()],
+        `INSERT INTO sessions (user_id, template_id, name, muscles, color, icon, started_at, ended_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id`,
+        [userId, t.id, t.name, t.muscles, t.color, t.icon, start.toISOString(), end.toISOString()],
       )
       const { rows: tes } = await tx.query(
         `SELECT te.*, e.name FROM template_exercises te JOIN exercises e ON e.id = te.exercise_id
@@ -82,8 +85,9 @@ export async function seedDemo(db, { weeks = 8, now = new Date() } = {}) {
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   const db = await createDb()
   await migrate(db)
-  await seedIfEmpty(db)
-  const n = await seedDemo(db)
+  if (process.env.NODE_ENV === 'production') throw new Error('Démo réservée au compte de test local')
+  await bootstrapAccounts(db)
+  const n = await seedDemo(db, await userIdOf(db, DEV_ACCOUNT.email))
   console.log(`[demo] ${n} séances générées`)
   await db.close()
 }

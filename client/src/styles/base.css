@@ -4,6 +4,18 @@
   box-sizing: border-box;
 }
 
+/*
+ * Shell d'application : le document ne défile jamais (pas de barre d'adresse
+ * qui se replie, pas de rebond élastique iOS). Seul #app-scroll défile, et la
+ * barre d'onglets est un élément du shell : elle reste parfaitement immobile.
+ */
+html,
+body {
+  height: 100%;
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+
 html {
   -webkit-text-size-adjust: 100%;
   text-size-adjust: 100%;
@@ -13,16 +25,29 @@ html {
 
 body {
   margin: 0;
-  min-height: 100dvh;
   background: var(--bg-app);
-  background-attachment: fixed;
   color: var(--color-text);
   font-family: var(--font-body);
   font-size: var(--fs-body);
   line-height: var(--lh-body);
   -webkit-font-smoothing: antialiased;
   -webkit-tap-highlight-color: transparent;
+}
+
+.app {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+}
+.app__scroll {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
   overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior-y: contain;
+  -webkit-overflow-scrolling: touch;
 }
 
 h1, h2, h3, p { margin: 0; }
@@ -88,7 +113,7 @@ input::placeholder { color: var(--color-text-muted); opacity: 0.7; }
   padding:
     calc(var(--safe-top) + clamp(24px, 9vw, 56px))
     calc(var(--gutter) + var(--safe-right))
-    calc(var(--nav-h) + var(--safe-bottom) + var(--space-6))
+    var(--space-6)
     calc(var(--gutter) + var(--safe-left));
 }
 .page--bleed { padding-inline: 0; }

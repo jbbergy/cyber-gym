@@ -1,4 +1,4 @@
-// Données initiales : catalogue d'exercices + programme Push / Pull / Legs des maquettes.
+// Données initiales de chaque compte : catalogue d'exercices + programme Push / Pull / Legs des maquettes.
 
 export const MUSCLES = ['pecs', 'dos', 'epaules', 'biceps', 'triceps', 'jambes', 'mollets', 'abdos', 'autre']
 
@@ -84,51 +84,28 @@ export const PROGRAM = [
   },
 ]
 
-export async function seedIfEmpty(db) {
-  const { rows } = await db.query('SELECT count(*)::int AS n FROM exercises')
-  if (rows[0].n > 0) return false
-  await db.tx(async (tx) => {
-    const ids = new Map()
-    for (const [name, icon, muscle] of EXERCISES) {
-      const r = await tx.query('INSERT INTO exercises (name, icon, muscle) VALUES ($1, $2, $3) RETURNING id', [name, icon, muscle])
-      ids.set(name, r.rows[0].id)
-    }
-    for (const [i, t] of PROGRAM.entries()) {
-      const r = await tx.query(
-        `INSERT INTO templates (name, muscles, color, icon, weekday, position)
-         VALUES ($1, $2, $3, $4, $5, $6) RETURNING id`,
-        [t.name, t.muscles, t.color, t.icon, t.weekday, i],
-      )
-      for (const [pos, [name, sets, reps, rest]] of t.exercises.entries()) {
-        await tx.query(
-          `INSERT INTO template_exercises (template_id, exercise_id, position, sets, reps, rest_seconds)
-           VALUES ($1, $2, $3, $4, $5, $6)`,
-          [r.rows[0].id, ids.get(name), pos, sets, reps, rest],
-        )
-      }
-    }
-  })
-  console.log('[db] programme de départ créé')
-  return true
-}
-
-const CATALOG_VERSION = 'catalog:v1'
-
-/**
- * Ajoute au catalogue les exercices de base manquants (bases créées avant leur ajout).
- * Une seule fois par version : un exercice supprimé par l'utilisateur ne revient pas.
- */
-export async function syncCatalog(db) {
-  const done = await db.query('SELECT 1 FROM schema_migrations WHERE name = $1', [CATALOG_VERSION])
-  if (done.rows[0]) return
-  await db.tx(async (tx) => {
-    await tx.query('INSERT INTO schema_migrations (name) VALUES ($1)', [CATALOG_VERSION])
-    for (const [name, icon, muscle] of EXERCISES) {
+/** Catalogue d'exercices + programme de départ d'un nouveau compte (dans la transaction de création). */
+export async function seedUser(tx, userId) {
+  const ids = new Map()
+  for (const [name, icon, muscle] of EXERCISES) {
+    const r = await tx.query(
+      'INSERT INTO exercises (user_id, name, icon, muscle) VALUES ($1, $2, $3, $4) RETURNING id',
+      [userId, name, icon, muscle],
+    )
+    ids.set(name, r.rows[0].id)
+  }
+  for (const [i, t] of PROGRAM.entries()) {
+    const r = await tx.query(
+      `INSERT INTO templates (user_id, name, muscles, color, icon, weekday, position)
+       VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id`,
+      [userId, t.name, t.muscles, t.color, t.icon, t.weekday, i],
+    )
+    for (const [pos, [name, sets, reps, rest]] of t.exercises.entries()) {
       await tx.query(
-        `INSERT INTO exercises (name, icon, muscle) VALUES ($1, $2, $3)
-         ON CONFLICT (name) DO UPDATE SET muscle = EXCLUDED.muscle WHERE exercises.muscle = 'autre'`,
-        [name, icon, muscle],
+        `INSERT INTO template_exercises (template_id, exercise_id, position, sets, reps, rest_seconds)
+         VALUES ($1, $2, $3, $4, $5, $6)`,
+        [r.rows[0].id, ids.get(name), pos, sets, reps, rest],
       )
     }
-  })
+  }
 }

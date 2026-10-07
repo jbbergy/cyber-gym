@@ -29,17 +29,16 @@ const isActive = (item) =>
 
 <style scoped>
 .cg-nav {
-  position: fixed;
-  inset: auto 0 0;
+  /* élément du shell (pas position: fixed) : immobile pendant le défilement */
+  flex-shrink: 0;
+  position: relative;
   z-index: 20;
   display: flex;
   align-items: flex-start;
   justify-content: center;
   height: calc(var(--nav-h) + var(--safe-bottom));
   padding: 6px calc(var(--space-2) + var(--safe-right)) var(--safe-bottom) calc(var(--space-2) + var(--safe-left));
-  background: rgb(14 11 21 / 0.92);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
+  background: var(--color-bg-raised);
   border-top: var(--border-w) solid var(--color-border);
 }
 .cg-nav__item {

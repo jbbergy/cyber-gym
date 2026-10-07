@@ -35,64 +35,65 @@ function parseTemplate(body = {}) {
   }
 }
 
-export async function writeTemplateExercises(tx, templateId, exercises, fallbackIcon) {
+export async function writeTemplateExercises(tx, userId, templateId, exercises, fallbackIcon) {
   await tx.query('DELETE FROM template_exercises WHERE template_id = $1', [templateId])
   for (const [position, ex] of exercises.entries()) {
     let exerciseId = ex.exerciseId
     if (!exerciseId) {
       const { rows } = await tx.query(
-        `INSERT INTO exercises (name, icon) VALUES ($1, $2)
-         ON CONFLICT (name) DO UPDATE SET name = EXCLUDED.name
+        `INSERT INTO exercises (user_id, name, icon) VALUES ($1, $2, $3)
+         ON CONFLICT (user_id, name) DO UPDATE SET name = EXCLUDED.name
          RETURNING id`,
-        [ex.name, fallbackIcon],
+        [userId, ex.name, fallbackIcon],
       )
       exerciseId = rows[0].id
     }
     const { rows } = await tx.query(
       `INSERT INTO template_exercises (template_id, exercise_id, position, sets, reps, rest_seconds)
-       SELECT $1, e.id, $3, $4, $5, $6 FROM exercises e WHERE e.id = $2
+       SELECT $1, e.id, $3, $4, $5, $6 FROM exercises e WHERE e.id = $2 AND e.user_id = $7
        RETURNING id`,
-      [templateId, exerciseId, position, ex.sets, ex.reps, ex.restSeconds],
+      [templateId, exerciseId, position, ex.sets, ex.reps, ex.restSeconds, userId],
     )
     if (!rows[0]) throw new HttpError(400, `Exercice ${position + 1} introuvable dans le catalogue`)
   }
 }
 
-async function insertTemplate(tx, t) {
+async function insertTemplate(tx, userId, t) {
   const { rows } = await tx.query(
-    `INSERT INTO templates (name, muscles, color, icon, weekday, position)
-     VALUES ($1, $2, $3, $4, $5, (SELECT COALESCE(max(position) + 1, 0) FROM templates))
+    `INSERT INTO templates (user_id, name, muscles, color, icon, weekday, position)
+     VALUES ($1, $2, $3, $4, $5, $6, (SELECT COALESCE(max(position) + 1, 0) FROM templates WHERE user_id = $1))
      RETURNING id`,
-    [t.name, t.muscles, t.color, t.icon, t.weekday],
+    [userId, t.name, t.muscles, t.color, t.icon, t.weekday],
   )
-  await writeTemplateExercises(tx, rows[0].id, t.exercises, t.icon)
+  await writeTemplateExercises(tx, userId, rows[0].id, t.exercises, t.icon)
   return rows[0].id
 }
 
 export default function templatesRouter(db) {
   const r = Router()
 
-  async function getOne(id) {
-    const { rows } = await db.query(`${LIST_SQL} WHERE t.id = $1 GROUP BY t.id`, [id])
+  async function getOne(userId, id) {
+    const { rows } = await db.query(`${LIST_SQL} WHERE t.id = $1 AND t.user_id = $2 GROUP BY t.id`, [id, userId])
     if (!rows[0]) throw new HttpError(404, 'Séance type introuvable')
     return rows[0]
   }
 
-  r.get('/templates', async (_req, res) => {
+  r.get('/templates', async (req, res) => {
     const { rows } = await db.query(
-      `${LIST_SQL} GROUP BY t.id ORDER BY t.weekday NULLS LAST, t.position, t.created_at`,
+      `${LIST_SQL} WHERE t.user_id = $1 GROUP BY t.id ORDER BY t.weekday NULLS LAST, t.position, t.created_at`,
+      [req.user.id],
     )
     res.json(rows)
   })
 
   r.get('/templates/:id', async (req, res) => {
-    res.json(await getOne(uuid(req.params.id)))
+    res.json(await getOne(req.user.id, uuid(req.params.id)))
   })
 
   r.post('/templates', async (req, res) => {
     const t = parseTemplate(req.body)
-    const id = await db.tx((tx) => insertTemplate(tx, t))
-    res.status(201).json(await getOne(id))
+    const id = await db.tx((tx) => insertTemplate(tx, req.user.id, t))
+    res.status(201).json(await getOne(req.user.id, id))
   })
 
   r.put('/templates/:id', async (req, res) => {
@@ -101,25 +102,25 @@ export default function templatesRouter(db) {
     await db.tx(async (tx) => {
       const { rows } = await tx.query(
         `UPDATE templates SET name = $2, muscles = $3, color = $4, icon = $5, weekday = $6
-         WHERE id = $1 RETURNING id`,
-        [id, t.name, t.muscles, t.color, t.icon, t.weekday],
+         WHERE id = $1 AND user_id = $7 RETURNING id`,
+        [id, t.name, t.muscles, t.color, t.icon, t.weekday, req.user.id],
       )
       if (!rows[0]) throw new HttpError(404, 'Séance type introuvable')
-      await writeTemplateExercises(tx, id, t.exercises, t.icon)
+      await writeTemplateExercises(tx, req.user.id, id, t.exercises, t.icon)
     })
-    res.json(await getOne(id))
+    res.json(await getOne(req.user.id, id))
   })
 
   r.delete('/templates/:id', async (req, res) => {
-    await db.query('DELETE FROM templates WHERE id = $1', [uuid(req.params.id)])
+    await db.query('DELETE FROM templates WHERE id = $1 AND user_id = $2', [uuid(req.params.id), req.user.id])
     res.status(204).end()
   })
 
   // Copie d'une séance type (sans jour fixe, pour ne pas doubler le planning)
   r.post('/templates/:id/duplicate', async (req, res) => {
-    const src = await getOne(uuid(req.params.id))
+    const src = await getOne(req.user.id, uuid(req.params.id))
     const id = await db.tx((tx) =>
-      insertTemplate(tx, {
+      insertTemplate(tx, req.user.id, {
         name: `${src.name} (copie)`.slice(0, 40),
         muscles: src.muscles,
         color: src.color,
@@ -128,13 +129,13 @@ export default function templatesRouter(db) {
         exercises: src.exercises.map((e) => ({ exerciseId: e.exerciseId, sets: e.sets, reps: e.reps, restSeconds: e.restSeconds })),
       }),
     )
-    res.status(201).json(await getOne(id))
+    res.status(201).json(await getOne(req.user.id, id))
   })
 
   // Nouvelle séance type à partir d'une séance réalisée (exercices + nombre de séries faites)
   r.post('/sessions/:id/template', async (req, res) => {
     const sessionId = uuid(req.params.id)
-    const s = await db.query('SELECT * FROM sessions WHERE id = $1', [sessionId])
+    const s = await db.query('SELECT * FROM sessions WHERE id = $1 AND user_id = $2', [sessionId, req.user.id])
     if (!s.rows[0]) throw new HttpError(404, 'Séance introuvable')
     const { rows: exercises } = await db.query(
       `SELECT se.exercise_id AS "exerciseId", se.target_reps AS reps, se.rest_seconds AS "restSeconds",
@@ -145,12 +146,12 @@ export default function templatesRouter(db) {
     )
     const { name, muscles, color, icon: ic } = s.rows[0]
     const id = await db.tx((tx) =>
-      insertTemplate(tx, {
+      insertTemplate(tx, req.user.id, {
         name: text(req.body?.name ?? name, 'Nom', { min: 1, max: 40 }),
         muscles, color, icon: ic, weekday: null, exercises,
       }),
     )
-    res.status(201).json(await getOne(id))
+    res.status(201).json(await getOne(req.user.id, id))
   })
 
   return r

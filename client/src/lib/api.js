@@ -19,6 +19,10 @@ export const network = reactive({
 /** erreur réseau ou passerelle (API coupée derrière un proxy) : on réessaiera */
 const isTransient = (err) => err.status === 0 || err.status >= 502
 
+/** Appelé quand la session a expiré (401 hors /auth) — branché par lib/auth.js */
+let onUnauthorized = () => {}
+export const setUnauthorizedHandler = (fn) => (onUnauthorized = fn)
+
 export class ApiError extends Error {
   constructor(status, message, data) {
     super(message)
@@ -58,6 +62,7 @@ async function send(method, url, body) {
   network.online = navigator.onLine // une réponse peut venir du cache du service worker
   if (res.status === 204) return null
   const data = await res.json().catch(() => null)
+  if (res.status === 401 && !url.startsWith('/auth/')) onUnauthorized()
   if (!res.ok) {
     const message = data?.error || (res.status >= 502 ? 'Serveur injoignable' : `Erreur ${res.status}`)
     throw new ApiError(res.status, message, data)
@@ -77,6 +82,7 @@ export async function flushOutbox() {
         await send(op.method, op.url, op.body)
       } catch (err) {
         if (isTransient(err)) break // toujours injoignable : on réessaiera plus tard
+        if (err.status === 401) break // déconnecté : on rejouera après reconnexion
         console.warn('[outbox] opération abandonnée', op, err) // 4xx : invalide, on la jette
       }
       list = readOutbox().slice(1)
@@ -114,8 +120,20 @@ if (typeof window !== 'undefined') {
   setInterval(() => network.pending && flushOutbox(), 20000)
 }
 
+/** Vide la file hors-ligne (déconnexion : les écritures en attente ne sont plus les nôtres). */
+export const clearOutbox = () => writeOutbox([])
+
 export const api = {
   health: () => send('GET', '/health'),
+
+  me: () => send('GET', '/auth/me'),
+  login: (email, password) => send('POST', '/auth/login', { email, password }),
+  register: (body) => send('POST', '/auth/register', body),
+  logout: () => send('POST', '/auth/logout'),
+  forgotPassword: (email) => send('POST', '/auth/forgot', { email }),
+  resetPassword: (token, password) => send('POST', '/auth/reset', { token, password }),
+  updateProfile: (body) => send('PUT', '/auth/me', body),
+  changePassword: (currentPassword, newPassword) => send('PUT', '/auth/password', { currentPassword, newPassword }),
 
   exercises: () => send('GET', '/exercises'),
   createExercise: (body) => send('POST', '/exercises', body),

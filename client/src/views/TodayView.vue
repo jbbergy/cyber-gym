@@ -2,7 +2,7 @@
 import { computed, onMounted, onBeforeUnmount, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import {
-  CgBadge, CgButton, CgCard, CgDialog, CgEmptyState, CgIconTile, CgListRow, CgPageHeader, CgSectionHeader, CgWeekStrip,
+  CgBadge, CgButton, CgCard, CgDialog, CgEmptyState, CgIconButton, CgIconTile, CgListRow, CgPageHeader, CgSectionHeader, CgWeekStrip,
 } from '../ds'
 import ExercisePicker from '../components/ExercisePicker.vue'
 import { api } from '../lib/api'
@@ -146,7 +146,11 @@ onBeforeUnmount(() => clearInterval(tick))
 
 <template>
   <main class="page">
-    <CgPageHeader :eyebrow="formatLongDate(now)" title="Aujourd'hui" />
+    <CgPageHeader :eyebrow="formatLongDate(now)" title="Aujourd'hui">
+      <template #actions>
+        <CgIconButton icon="user" label="Mon profil" to="/profil" />
+      </template>
+    </CgPageHeader>
 
     <!-- Séance en cours -->
     <CgCard v-if="active" highlight :class="`accent-${active.color}`">

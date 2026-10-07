@@ -466,7 +466,7 @@ onBeforeUnmount(() => {
 .session {
   width: 100%;
   max-width: var(--content-max);
-  min-height: 100dvh;
+  min-height: 100%;
   margin-inline: auto;
   display: flex;
   flex-direction: column;
