@@ -47,6 +47,8 @@ export const UI_ICONS = {
   bookmark: p('M6 3h12v18l-6-4-6 4z'),
   user: c(12, 8, 4) + p('M4 21a8 8 0 0 1 16 0'),
   logout: p('M15 4h4v16h-4M10 8l-4 4 4 4M6 12h11'),
+  share: p('M12 3v12M7 8l5-5 5 5M5 13v7h14v-7'),
+  download: p('M12 3v12M7 10l5 5 5-5M5 20h14'),
 }
 
 export const FILLED_ICONS = {

@@ -81,6 +81,7 @@ En production, ajouter au `.env` du serveur `OWNER_EMAIL` (rattachement des donn
 - **Presets de séance** (« séances types ») : jour, couleur, icône, exercices choisis dans le catalogue avec séries × rép. et repos ; création, édition, duplication, suppression, ou création depuis une séance réalisée (« Enregistrer comme preset » dans l'historique).
 - **Catalogue d'exercices** (`/exercices`) : ~40 exercices de base classés par groupe musculaire, recherche, création / renommage / suppression (si inutilisé). Le sélecteur d'exercices (recherche, filtre par muscle, « Fréquents », multi-sélection, création à la volée) est partagé par les presets, la séance libre et la séance en cours.
 - **Historique** : regroupé par semaine, durée, volume, records ; détail série par série.
+- **Partage d'une séance** (icône en haut du détail, ou « Partager ma séance ») : carte image 1080 × 1350 générée sur l'appareil (titre, durée, volume, séries, records, meilleure série par exercice), envoyée par le menu de partage natif du téléphone ; sur ordinateur, l'image est copiée dans le presse-papiers, ou enregistrée à défaut. Rien n'est publié côté serveur.
 - **Progression** : par exercice, meilleure série, courbe de charge, 1RM estimé (Epley), dernier volume.
 - **Hors ligne** : l'app et les dernières données consultées sont en cache (service worker). Pendant une séance, les séries validées sans réseau partent dans une file locale, rejouée au retour de la connexion (écritures idempotentes, id générés côté client).
 

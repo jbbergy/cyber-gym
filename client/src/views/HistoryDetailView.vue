@@ -3,6 +3,7 @@ import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { CgBadge, CgButton, CgCard, CgDialog, CgIcon, CgIconButton, CgIconTile, CgPageHeader, CgStat } from '../ds'
 import SetDetailDialog from '../components/SetDetailDialog.vue'
+import ShareSessionDialog from '../components/ShareSessionDialog.vue'
 import { api } from '../lib/api'
 import { auth } from '../lib/auth'
 import { exerciseCalories, sessionCalories } from '../lib/calories'
@@ -13,6 +14,7 @@ const route = useRoute()
 const router = useRouter()
 const session = ref(null)
 const confirmDelete = ref(false)
+const sharing = ref(false)
 /** null · { exercise, set } : série dont on affiche le détail */
 const detail = ref(null)
 
@@ -76,6 +78,7 @@ async function remove() {
       :subtitle="session.muscles || null"
     >
       <template #actions>
+        <CgIconButton icon="share" label="Partager la séance" @click="sharing = true" />
         <CgIconButton icon="chevron-left" label="Retour à l'historique" to="/historique" />
       </template>
     </CgPageHeader>
@@ -116,11 +119,13 @@ async function remove() {
       </ol>
     </CgCard>
 
+    <CgButton size="m" icon="share" block @click="sharing = true">Partager ma séance</CgButton>
     <CgButton variant="outline" size="m" icon="bookmark" block :loading="savingPreset" @click="saveAsPreset">
       Enregistrer comme preset
     </CgButton>
     <CgButton variant="ghost" size="s" icon="trash" class="danger" @click="confirmDelete = true">Supprimer cette séance</CgButton>
 
+    <ShareSessionDialog :open="sharing" :session="session" :exercises="exercises" :kcal="kcal" @close="sharing = false" />
     <SetDetailDialog :exercise="detail?.exercise" :set="detail?.set ?? null" @close="detail = null" />
 
     <CgDialog :open="confirmDelete" title="Supprimer ?" description="Cette séance et ses séries seront définitivement effacées." @close="confirmDelete = false">
