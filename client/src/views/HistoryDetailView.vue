@@ -2,6 +2,7 @@
 import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { CgBadge, CgButton, CgCard, CgDialog, CgIcon, CgIconButton, CgIconTile, CgPageHeader, CgStat } from '../ds'
+import SetDetailDialog from '../components/SetDetailDialog.vue'
 import { api } from '../lib/api'
 import { durationMinutes, formatDayDate, formatInt, formatNumber, formatTime } from '../lib/format'
 import { toast } from '../lib/toast'
@@ -10,6 +11,8 @@ const route = useRoute()
 const router = useRouter()
 const session = ref(null)
 const confirmDelete = ref(false)
+/** null · { exercise, set } : série dont on affiche le détail */
+const detail = ref(null)
 
 onMounted(async () => {
   try {
@@ -91,10 +94,13 @@ async function remove() {
         </div>
       </div>
       <ol class="sets">
-        <li v-for="s in e.done" :key="s.id" class="sets__item">
-          <span class="t-num sets__n">{{ s.setNumber }}</span>
-          <span class="t-num sets__v">{{ formatNumber(s.weight) }} <small>kg</small> × {{ s.reps }}</span>
-          <CgIcon v-if="e.record && s.weight === e.top" name="trophy" :size="16" class="sets__pr" label="Record" />
+        <li v-for="s in e.done" :key="s.id">
+          <button type="button" class="sets__item" :aria-label="`Détail de la série ${s.setNumber}`" @click="detail = { exercise: e, set: s }">
+            <span class="t-num sets__n">{{ s.setNumber }}</span>
+            <span class="t-num sets__v">{{ formatNumber(s.weight) }} <small>kg</small> × {{ s.reps }}</span>
+            <CgIcon v-if="e.record && s.weight === e.top" name="trophy" :size="16" class="sets__pr" label="Record" />
+            <CgIcon name="chevron-right" :size="16" class="sets__more" />
+          </button>
         </li>
       </ol>
     </CgCard>
@@ -103,6 +109,8 @@ async function remove() {
       Enregistrer comme preset
     </CgButton>
     <CgButton variant="ghost" size="s" icon="trash" class="danger" @click="confirmDelete = true">Supprimer cette séance</CgButton>
+
+    <SetDetailDialog :exercise="detail?.exercise" :set="detail?.set ?? null" @close="detail = null" />
 
     <CgDialog :open="confirmDelete" title="Supprimer ?" description="Cette séance et ses séries seront définitivement effacées." @close="confirmDelete = false">
       <template #actions>
@@ -120,11 +128,27 @@ async function remove() {
 .ex-name { font-weight: 700; font-size: var(--fs-body-l); line-height: 1.25; }
 .ex-meta { font-size: var(--fs-body-s); }
 .sets { margin: 0; padding: 0; list-style: none; }
-.sets__item { display: flex; align-items: center; gap: var(--space-3); min-height: 36px; border-top: var(--border-w) solid var(--color-border); }
+.sets__item {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-height: 44px;
+  padding: 0;
+  background: transparent;
+  border: 0;
+  border-top: var(--border-w) solid var(--color-border);
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.sets__item:hover .sets__more { color: var(--color-text); }
 .sets__n { width: 24px; text-align: center; color: var(--color-text-muted); font-size: 1.125rem; }
 .sets__v { font-size: 1.25rem; }
 .sets__v small { font-size: 0.8rem; color: var(--color-text-muted); }
 .sets__pr { color: var(--color-action); }
+.sets__more { margin-left: auto; color: var(--color-text-muted); }
 .danger { --accent: var(--color-danger); align-self: center; }
 @media (max-width: 300px) {
   .stats { gap: var(--space-2); }

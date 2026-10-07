@@ -3,6 +3,7 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { CgButton, CgDialog, CgEmptyState, CgIcon, CgIconButton, CgIconTile, CgNumberField, CgSegments } from '../ds'
 import ExercisePicker from '../components/ExercisePicker.vue'
+import SetDetailDialog from '../components/SetDetailDialog.vue'
 import { api, flushOutbox, hasPendingWrites } from '../lib/api'
 import { formatClock, formatNumber, formatRest, plural } from '../lib/format'
 import { useRestTimer } from '../lib/restTimer'
@@ -19,6 +20,8 @@ const selectedId = ref(null)
 const finishing = ref(false)
 const confirmFinish = ref(false)
 const confirmRemove = ref(false)
+/** série validée dont on affiche le détail */
+const detailSet = ref(null)
 /** null · { mode: 'add' } · { mode: 'replace' } */
 const picker = ref(null)
 const now = ref(Date.now())
@@ -153,6 +156,11 @@ function toggle(set) {
   } else {
     validate(set)
   }
+}
+
+function correct(set) {
+  detailSet.value = null
+  toggle(set)
 }
 
 function addSet() {
@@ -353,7 +361,7 @@ onBeforeUnmount(() => {
         :key="set.id"
         class="sets__grid set"
         :class="{ 'is-done': set.doneAt, 'is-active': activeSet?.id === set.id }"
-        @click="!set.doneAt && (selectedId = set.id)"
+        @click="set.doneAt ? (detailSet = set) : (selectedId = set.id)"
       >
         <div class="t-num set__num">{{ set.setNumber }}</div>
         <div class="set__prev col-prev">{{ prevLabel(set) }}</div>
@@ -431,6 +439,12 @@ onBeforeUnmount(() => {
       @close="picker = null"
       @pick="onPick"
     />
+
+    <SetDetailDialog :exercise="ex" :set="detailSet" @close="detailSet = null">
+      <template #actions>
+        <CgButton variant="outline" size="m" icon="pencil" @click="correct(detailSet)">Corriger</CgButton>
+      </template>
+    </SetDetailDialog>
 
     <CgDialog
       :open="confirmRemove"
@@ -518,7 +532,7 @@ onBeforeUnmount(() => {
 .set__num { font-size: 1.375rem; text-align: center; }
 .set__prev { font-size: var(--fs-body-s); font-variant-numeric: tabular-nums; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .set__val { font-size: var(--fs-number); text-align: center; }
-.set.is-done { background: rgb(var(--rgb-action) / 0.08); border-color: rgb(var(--rgb-action) / 0.4); color: var(--color-text); cursor: default; }
+.set.is-done { background: rgb(var(--rgb-action) / 0.08); border-color: rgb(var(--rgb-action) / 0.4); color: var(--color-text); }
 .set.is-done .set__val { color: var(--color-action); }
 .set.is-done .set__prev { color: var(--color-text-muted); }
 .set.is-active {
