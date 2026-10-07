@@ -65,14 +65,14 @@ export default function sessionsRouter(db) {
     const { rows: previous } = await db.query(
       `WITH ids AS (SELECT json_array_elements_text($1::json)::uuid AS id),
        last AS (
-         SELECT DISTINCT ON (se.exercise_id) se.exercise_id, se.session_id
+         SELECT DISTINCT ON (se.exercise_id) se.exercise_id, se.session_id, s.started_at
          FROM session_exercises se JOIN sessions s ON s.id = se.session_id
          WHERE se.exercise_id IN (SELECT id FROM ids)
            AND s.ended_at IS NOT NULL AND s.started_at < $2 AND s.id <> $3
            AND EXISTS (SELECT 1 FROM session_sets x WHERE x.session_exercise_id = se.id AND x.done_at IS NOT NULL)
          ORDER BY se.exercise_id, s.started_at DESC
        )
-       SELECT se.exercise_id AS "exerciseId", ss.weight, ss.reps
+       SELECT se.exercise_id AS "exerciseId", last.started_at AS "startedAt", ss.weight, ss.reps
        FROM last
        JOIN session_exercises se ON se.session_id = last.session_id AND se.exercise_id = last.exercise_id
        JOIN session_sets ss ON ss.session_exercise_id = se.id AND ss.done_at IS NOT NULL
@@ -92,6 +92,7 @@ export default function sessionsRouter(db) {
       exercises: exercises.map((e) => ({
         ...e,
         previousBest: best.get(e.exerciseId) ?? null,
+        previousDate: previous.find((p) => p.exerciseId === e.exerciseId)?.startedAt ?? null,
         previous: previous.filter((p) => p.exerciseId === e.exerciseId).map(({ weight, reps }) => ({ weight, reps })),
         sets: sets.filter((x) => x.sessionExerciseId === e.id),
       })),

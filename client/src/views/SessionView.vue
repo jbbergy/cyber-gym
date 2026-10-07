@@ -5,7 +5,7 @@ import { CgButton, CgDialog, CgEmptyState, CgIcon, CgIconButton, CgIconTile, CgN
 import ExercisePicker from '../components/ExercisePicker.vue'
 import SetDetailDialog from '../components/SetDetailDialog.vue'
 import { api, flushOutbox, hasPendingWrites } from '../lib/api'
-import { formatClock, formatNumber, formatRest, plural } from '../lib/format'
+import { formatClock, formatDayDate, formatNumber, formatRest, formatShortDate, plural } from '../lib/format'
 import { useRestTimer } from '../lib/restTimer'
 import { toast } from '../lib/toast'
 
@@ -22,6 +22,26 @@ const confirmFinish = ref(false)
 const confirmRemove = ref(false)
 /** série validée dont on affiche le détail */
 const detailSet = ref(null)
+/** l'aide « touche une série validée » disparaît une fois le détail découvert */
+const DETAIL_HINT_KEY = 'cg.hint.setDetail'
+const detailHintSeen = ref(readFlag(DETAIL_HINT_KEY))
+function readFlag(key) {
+  try {
+    return localStorage.getItem(key) === '1'
+  } catch {
+    return false
+  }
+}
+function openDetail(set) {
+  detailSet.value = set
+  if (detailHintSeen.value) return
+  detailHintSeen.value = true
+  try {
+    localStorage.setItem(DETAIL_HINT_KEY, '1')
+  } catch {
+    /* ignore */
+  }
+}
 /** null · { mode: 'add' } · { mode: 'replace' } */
 const picker = ref(null)
 const now = ref(Date.now())
@@ -95,9 +115,9 @@ const elapsed = computed(() => (session.value ? (now.value - new Date(session.va
 const prevFor = (set) => ex.value?.previous?.[set.setNumber - 1] ?? null
 const prevLabel = (set) => {
   const p = prevFor(set)
-  return p ? `${formatNumber(p.weight)} × ${p.reps}` : '—'
+  return p ? `${formatNumber(p.weight)} kg × ${p.reps}` : '—'
 }
-/** résumé « Dernière fois » pour les écrans trop étroits pour la colonne Préc. */
+/** résumé de la séance précédente pour les écrans trop étroits pour la colonne de comparaison */
 const prevSummary = computed(() => {
   const prev = ex.value?.previous ?? []
   if (!prev.length) return null
@@ -106,6 +126,8 @@ const prevSummary = computed(() => {
     ? `${prev.length} × ${prev[0].reps} à ${formatNumber(prev[0].weight)} kg`
     : prev.map((p) => `${formatNumber(p.weight)}×${p.reps}`).join(' · ')
 })
+const prevDateLabel = computed(() => (ex.value?.previousDate ? formatDayDate(ex.value.previousDate) : null))
+const showDetailHint = computed(() => !detailHintSeen.value && Boolean(ex.value?.sets.some((s) => s.doneAt)))
 const isRecord = computed(() => {
   const best = ex.value?.previousBest
   if (best === null || best === undefined) return false
@@ -340,17 +362,18 @@ onBeforeUnmount(() => {
       <div class="exercise__text">
         <h1 class="t-display exercise__name">{{ ex.name }}</h1>
         <div class="exercise__goal">
-          Objectif {{ ex.targetSets }} × {{ ex.targetReps }} · repos {{ formatRest(ex.restSeconds) }}
+          Objectif : {{ plural(ex.targetSets, 'série') }} de {{ ex.targetReps }} rép. · repos {{ formatRest(ex.restSeconds) }}
           <span v-if="isRecord" class="record"><CgIcon name="trophy" :size="16" /> Record</span>
         </div>
-        <div v-if="prevSummary" class="exercise__prev">Dernière fois : {{ prevSummary }}</div>
+        <div v-if="prevSummary" class="exercise__prev">Séance précédente<template v-if="prevDateLabel"> ({{ prevDateLabel }})</template> : {{ prevSummary }}</div>
       </div>
     </div>
 
     <section class="sets" aria-label="Séries">
+      <p v-if="ex.previousDate" class="sets__hint col-prev">La colonne datée rappelle ta séance précédente sur cet exercice.</p>
       <div class="sets__grid sets__head" aria-hidden="true">
         <div><span class="col-prev">Série</span><span class="narrow-only">N°</span></div>
-        <div class="col-prev">Préc.</div>
+        <div class="col-prev">{{ ex.previousDate ? `Le ${formatShortDate(ex.previousDate)}` : 'Avant' }}</div>
         <div class="center">Kg</div>
         <div class="center">Rép.</div>
         <div />
@@ -361,7 +384,7 @@ onBeforeUnmount(() => {
         :key="set.id"
         class="sets__grid set"
         :class="{ 'is-done': set.doneAt, 'is-active': activeSet?.id === set.id }"
-        @click="set.doneAt ? (detailSet = set) : (selectedId = set.id)"
+        @click="set.doneAt ? openDetail(set) : (selectedId = set.id)"
       >
         <div class="t-num set__num">{{ set.setNumber }}</div>
         <div class="set__prev col-prev">{{ prevLabel(set) }}</div>
@@ -397,6 +420,7 @@ onBeforeUnmount(() => {
         </button>
       </div>
 
+      <p v-if="showDetailHint" class="sets__hint">Touche une série validée pour voir son détail ou la corriger.</p>
       <CgButton variant="ghost" size="s" icon="plus" class="sets__add" @click="addSet">Ajouter une série</CgButton>
     </section>
 
@@ -559,9 +583,10 @@ onBeforeUnmount(() => {
 }
 .is-active .set__check-dot { border-color: var(--color-primary); }
 .set__check[aria-pressed='true'] .set__check-dot { background: var(--color-action); border-color: var(--color-action); box-shadow: 0 0 12px rgb(var(--rgb-action) / 0.55); }
+.sets__hint { margin: 0; padding: 0 var(--space-2); font-size: var(--fs-body-s); color: var(--color-text-muted); }
 .sets__add { align-self: flex-start; --accent: var(--color-primary); }
 
-/* Écrans étroits (< 330px de tableau) : on retire la colonne « Préc. » et on affiche un résumé */
+/* Écrans étroits (< 330px de tableau) : on retire la colonne de comparaison et on affiche un résumé */
 @container (max-width: 330px) {
   .sets__grid { grid-template-columns: 24px minmax(0, 1fr) minmax(0, 1fr) 44px; gap: 6px; padding: 0 4px 0 6px; }
   .col-prev { display: none; }
