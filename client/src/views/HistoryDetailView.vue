@@ -4,6 +4,8 @@ import { useRoute, useRouter } from 'vue-router'
 import { CgBadge, CgButton, CgCard, CgDialog, CgIcon, CgIconButton, CgIconTile, CgPageHeader, CgStat } from '../ds'
 import SetDetailDialog from '../components/SetDetailDialog.vue'
 import { api } from '../lib/api'
+import { auth } from '../lib/auth'
+import { exerciseCalories, sessionCalories } from '../lib/calories'
 import { durationMinutes, formatDayDate, formatInt, formatNumber, formatTime } from '../lib/format'
 import { toast } from '../lib/toast'
 
@@ -33,10 +35,13 @@ const exercises = computed(() =>
       done,
       volume: done.reduce((a, s) => a + (s.weight ?? 0) * (s.reps ?? 0), 0),
       record: e.previousBest !== null && top > e.previousBest,
+      kcal: exerciseCalories(auth.user, e),
       top,
     }
   }),
 )
+
+const kcal = computed(() => sessionCalories(auth.user, session.value))
 
 const savingPreset = ref(false)
 async function saveAsPreset() {
@@ -80,6 +85,12 @@ async function remove() {
       <CgStat class="accent-pink" label="Volume" :value="`${formatInt(session.volume)} kg`" />
       <CgStat class="accent-violet" label="Séries" :value="session.setsDone" />
       <CgStat class="accent-green" label="Records" :value="session.records" />
+      <RouterLink v-if="kcal !== null" to="/profil/calories" class="stats__wide stats__link" aria-label="Énergie estimée : voir le mode de calcul">
+        <CgStat class="accent-yellow" label="Énergie estimée" :value="`${formatInt(kcal)} kcal`" />
+      </RouterLink>
+      <RouterLink v-else to="/profil" class="stats__wide t-muted stats__hint">
+        Renseigne ton poids, ta taille et ton âge pour estimer les calories dépensées
+      </RouterLink>
     </div>
 
     <CgCard v-for="e in exercises" :key="e.id" padding="s">
@@ -90,7 +101,7 @@ async function remove() {
             <span class="ex-name">{{ e.name }}</span>
             <CgBadge v-if="e.record" tone="success">Record</CgBadge>
           </div>
-          <div class="t-muted ex-meta">{{ formatInt(e.volume) }} kg · max {{ formatNumber(e.top) }} kg</div>
+          <div class="t-muted ex-meta">{{ formatInt(e.volume) }} kg · max {{ formatNumber(e.top) }} kg<template v-if="e.kcal !== null"> · {{ formatInt(e.kcal) }} kcal</template></div>
         </div>
       </div>
       <ol class="sets">
@@ -123,6 +134,9 @@ async function remove() {
 
 <style scoped>
 .stats { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-3); }
+.stats__wide { grid-column: 1 / -1; }
+.stats__link { color: inherit; text-decoration: none; }
+.stats__hint { font-size: var(--fs-body-s); text-decoration: underline; text-underline-offset: 3px; }
 .ex-head { display: flex; align-items: center; gap: var(--space-3); }
 .ex-title { gap: var(--space-2); }
 .ex-name { font-weight: 700; font-size: var(--fs-body-l); line-height: 1.25; }

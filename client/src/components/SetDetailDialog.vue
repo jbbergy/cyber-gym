@@ -1,6 +1,8 @@
 <script setup>
 import { computed } from 'vue'
 import { CgButton, CgDialog, CgIcon } from '../ds'
+import { auth } from '../lib/auth'
+import { restBefore, setCalories } from '../lib/calories'
 import { formatDayDate, formatInt, formatNumber, formatRest, formatTime, plural } from '../lib/format'
 
 const props = defineProps({
@@ -22,15 +24,9 @@ const previousBest = computed(() => props.exercise?.previousBest ?? null)
 const record = computed(() => previousBest.value !== null && weight.value > previousBest.value)
 
 /** repos réel : écart avec la série de l'exercice validée juste avant */
-const restTaken = computed(() => {
-  if (!set.value?.doneAt) return null
-  const at = new Date(set.value.doneAt)
-  const before = (props.exercise?.sets ?? [])
-    .filter((s) => s.doneAt && s.id !== set.value.id && new Date(s.doneAt) < at)
-    .map((s) => new Date(s.doneAt))
-    .sort((a, b) => b - a)[0]
-  return before ? Math.round((at - before) / 1000) : null
-})
+const restTaken = computed(() => restBefore(set.value, props.exercise?.sets ?? []))
+/** null si le profil (poids, taille, âge) n'est pas renseigné */
+const kcal = computed(() => (set.value ? setCalories(auth.user, set.value, restTaken.value) : null))
 
 // ── Comparaison avec la même série lors de la séance précédente sur cet exercice ──
 const previousSets = computed(() => props.exercise?.previous ?? [])
@@ -109,6 +105,16 @@ const changes = computed(() => {
               </dt>
               <dd class="t-num">{{ restTaken === null ? '—' : formatRest(restTaken) }}</dd>
             </div>
+            <div class="facts__row">
+              <dt>
+                Énergie dépensée
+                <span class="facts__hint">
+                  <template v-if="kcal === null">renseigne poids, taille et âge dans <RouterLink to="/profil">ton profil</RouterLink></template>
+                  <template v-else>estimation, repos avant la série compris · <RouterLink to="/profil/calories">calcul</RouterLink></template>
+                </span>
+              </dt>
+              <dd class="t-num">{{ kcal === null ? '—' : `${formatInt(kcal)} kcal` }}</dd>
+            </div>
           </dl>
         </section>
       </div>
@@ -161,5 +167,6 @@ const changes = computed(() => {
 .facts dt { display: flex; flex-direction: column; gap: 2px; min-width: 0; font-weight: 600; }
 .facts__hint { font-size: var(--fs-body-s); font-weight: 400; color: var(--color-text-muted); }
 .facts__hint:empty { display: none; }
+.facts__hint a { color: var(--color-action); }
 .facts dd { margin: 0; flex-shrink: 0; font-size: 1.25rem; text-align: right; }
 </style>

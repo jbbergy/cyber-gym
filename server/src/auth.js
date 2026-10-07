@@ -83,7 +83,8 @@ export async function endSession(db, req, res) {
   setCookie(res, '', 0)
 }
 
-export const PUBLIC_USER = 'u.id, u.email, u.name, u.created_at AS "createdAt"'
+export const PUBLIC_USER = `u.id, u.email, u.name, u.created_at AS "createdAt",
+  u.weight_kg AS "weightKg", u.height_cm AS "heightCm", u.birth_year AS "birthYear", u.sex`
 
 /** Middleware : charge req.user depuis le cookie (sans l'exiger). */
 export function loadUser(db) {

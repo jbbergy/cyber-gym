@@ -1,9 +1,11 @@
 <script setup>
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { CgButton, CgCard, CgPageHeader, CgSectionHeader, CgTextField } from '../ds'
+import { CgButton, CgCard, CgNumberField, CgPageHeader, CgSectionHeader, CgSelect, CgTextField } from '../ds'
 import { api, network } from '../lib/api'
 import { auth, logout, setUser } from '../lib/auth'
+import { ageOf, basalMetabolicRate } from '../lib/calories'
+import { formatInt } from '../lib/format'
 import { toast } from '../lib/toast'
 
 const router = useRouter()
@@ -13,22 +15,36 @@ const email = ref(auth.user?.email ?? '')
 const savingProfile = ref(false)
 const profileError = ref(null)
 
-const current = ref('')
-const next = ref('')
-const confirm = ref('')
-const savingPassword = ref(false)
-const passwordError = ref(null)
+// Morphologie : sert à estimer les calories dépensées
+const weightKg = ref(auth.user?.weightKg ?? null)
+const heightCm = ref(auth.user?.heightCm ?? null)
+const birthYear = ref(auth.user?.birthYear ?? null)
+const sex = ref(auth.user?.sex ?? null)
+const SEXES = [
+  { value: null, label: 'Non précisé' },
+  { value: 'f', label: 'Femme' },
+  { value: 'm', label: 'Homme' },
+]
+const thisYear = new Date().getFullYear()
+const age = computed(() => (birthYear.value >= 1900 && birthYear.value <= thisYear - 10 ? ageOf({ birthYear: birthYear.value }) : null))
+const bmr = computed(() =>
+  basalMetabolicRate({ weightKg: weightKg.value, heightCm: heightCm.value, birthYear: age.value === null ? null : birthYear.value, sex: sex.value }),
+)
+const savingBody = ref(false)
+const bodyError = ref(null)
 
-const memberSince = auth.user?.createdAt
-  ? new Date(auth.user.createdAt).toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' })
-  : null
+/** le serveur enregistre nom, e-mail et morphologie ensemble : chaque formulaire envoie ses champs + les valeurs enregistrées */
+const saved = () => {
+  const u = auth.user ?? {}
+  return { name: u.name, email: u.email, weightKg: u.weightKg ?? null, heightCm: u.heightCm ?? null, birthYear: u.birthYear ?? null, sex: u.sex ?? null }
+}
 
 async function saveProfile() {
   profileError.value = null
   if (!name.value.trim() || !email.value.trim()) return (profileError.value = 'Nom et e-mail obligatoires')
   savingProfile.value = true
   try {
-    setUser(await api.updateProfile({ name: name.value, email: email.value }))
+    setUser(await api.updateProfile({ ...saved(), name: name.value, email: email.value }))
     name.value = auth.user.name
     email.value = auth.user.email
     toast('Profil enregistré', { tone: 'success' })
@@ -36,6 +52,23 @@ async function saveProfile() {
     profileError.value = err.message
   } finally {
     savingProfile.value = false
+  }
+}
+
+async function saveBody() {
+  bodyError.value = null
+  if (weightKg.value !== null && (weightKg.value < 20 || weightKg.value > 400)) return (bodyError.value = 'Poids : entre 20 et 400 kg')
+  if (heightCm.value !== null && (heightCm.value < 100 || heightCm.value > 250)) return (bodyError.value = 'Taille : entre 100 et 250 cm')
+  if (birthYear.value !== null && age.value === null) return (bodyError.value = `Année de naissance : entre 1900 et ${thisYear - 10}`)
+  savingBody.value = true
+  try {
+    const body = { weightKg: weightKg.value, heightCm: heightCm.value, birthYear: birthYear.value, sex: sex.value }
+    setUser(await api.updateProfile({ ...saved(), ...body }))
+    toast('Morphologie enregistrée', { tone: 'success' })
+  } catch (err) {
+    bodyError.value = err.message
+  } finally {
+    savingBody.value = false
   }
 }
 
@@ -78,6 +111,26 @@ async function signOut() {
     </section>
 
     <section class="stack">
+      <CgSectionHeader title="Morphologie" />
+      <CgCard as="form" novalidate @submit.prevent="saveBody">
+        <p class="t-muted hint">
+          Sert à estimer les calories dépensées à chaque série · <RouterLink to="/profil/calories">comment c'est calculé</RouterLink>
+        </p>
+        <p v-if="bodyError" class="form-error" role="alert">{{ bodyError }}</p>
+        <div class="body-grid">
+          <CgNumberField v-model="weightKg" label="Poids (kg)" :hide-label="false" decimal size="m" :min="0" :max="400" />
+          <CgNumberField v-model="heightCm" label="Taille (cm)" :hide-label="false" size="m" :min="0" :max="250" />
+          <CgNumberField v-model="birthYear" label="Année de naissance" :hide-label="false" size="m" :min="0" :max="thisYear" />
+          <CgSelect v-model="sex" label="Sexe" :options="SEXES" />
+        </div>
+        <p v-if="bmr" class="t-muted hint">
+          <template v-if="age !== null">{{ age }} ans · </template>métabolisme de base ≈ <strong class="t-num">{{ formatInt(bmr) }} kcal</strong> / jour
+        </p>
+        <CgButton type="submit" variant="outline" size="m" block class="accent-violet" :loading="savingBody">Enregistrer</CgButton>
+      </CgCard>
+    </section>
+
+    <section class="stack">
       <CgSectionHeader title="Mot de passe" />
       <CgCard as="form" novalidate @submit.prevent="savePassword">
         <!-- champ caché : aide les gestionnaires de mots de passe à associer le compte -->
@@ -95,6 +148,10 @@ async function signOut() {
 </template>
 
 <style scoped>
+.hint { margin: 0; font-size: var(--fs-body-s); line-height: 1.45; }
+.hint strong { color: var(--color-text); }
+.hint a { color: var(--color-action); }
+.body-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-3); align-items: end; }
 .form-error {
   padding: 10px 12px;
   border-radius: 12px;

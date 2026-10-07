@@ -4,7 +4,7 @@ import {
   rateLimit, requireUser, startSession, tokenHash, verifyPassword,
 } from '../auth.js'
 import { DEV_ACCOUNT, countOrphans, createUser, ownerEmail } from '../accounts.js'
-import { HttpError, text } from '../http.js'
+import { HttpError, int, num, oneOf, text } from '../http.js'
 import { mailConfigured, sendMail } from '../mail.js'
 
 const RESET_MINUTES = 60
@@ -114,7 +114,20 @@ export default function authRouter(db) {
     }
     const taken = await db.query('SELECT 1 FROM users WHERE lower(email) = $1 AND id <> $2', [address, req.user.id])
     if (taken.rows[0]) throw new HttpError(409, 'Un compte existe déjà avec cette adresse')
-    await db.query('UPDATE users SET name = $2, email = $3, updated_at = now() WHERE id = $1', [req.user.id, name(body.name), address])
+    const year = new Date().getFullYear()
+    await db.query(
+      `UPDATE users SET name = $2, email = $3, weight_kg = $4, height_cm = $5, birth_year = $6, sex = $7, updated_at = now()
+       WHERE id = $1`,
+      [
+        req.user.id,
+        name(body.name),
+        address,
+        num(body.weightKg, 'Poids', { min: 20, max: 400, nullable: true }),
+        int(body.heightCm, 'Taille', { min: 100, max: 250, nullable: true }),
+        int(body.birthYear, 'Année de naissance', { min: 1900, max: year - 10, nullable: true }),
+        body.sex ? oneOf(body.sex, 'Sexe', ['m', 'f']) : null,
+      ],
+    )
     res.json(await getUser(req.user.id))
   })
 

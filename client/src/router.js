@@ -18,6 +18,7 @@ export const router = createRouter({
     { path: '/historique/:id', name: 'history-detail', component: () => import('./views/HistoryDetailView.vue'), meta: { title: 'Détail de séance' } },
     { path: '/progression', name: 'progress', component: () => import('./views/ProgressView.vue'), meta: { title: 'Progression' } },
     { path: '/profil', name: 'profile', component: () => import('./views/ProfileView.vue'), meta: { title: 'Mon profil' } },
+    { path: '/profil/calories', name: 'calories', component: () => import('./views/CaloriesView.vue'), meta: { title: 'Calcul des calories' } },
     { path: '/connexion', name: 'login', component: () => import('./views/LoginView.vue'), meta: open('Connexion') },
     { path: '/inscription', name: 'register', component: () => import('./views/RegisterView.vue'), meta: open('Créer un compte') },
     { path: '/mot-de-passe-oublie', name: 'forgot', component: () => import('./views/ForgotPasswordView.vue'), meta: open('Mot de passe oublié') },
