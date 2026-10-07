@@ -160,6 +160,7 @@ export const api = {
   /** séance libre : exercises = [{ exerciseId, sets, reps, restSeconds }] */
   startFreeSession: (exercises, name) => send('POST', '/sessions', { exercises, name }),
   addSessionExercise: (sessionId, body) => send('POST', `/sessions/${sessionId}/exercises`, body),
+  setSessionExerciseRest: (id, restSeconds) => queued('PATCH', `/session-exercises/${id}`, { restSeconds }),
   deleteSessionExercise: (id) => queued('DELETE', `/session-exercises/${id}`),
   finishSession: (id, endedAt = new Date().toISOString()) => queued('PATCH', `/sessions/${id}`, { endedAt }),
   deleteSession: (id) => send('DELETE', `/sessions/${id}`),

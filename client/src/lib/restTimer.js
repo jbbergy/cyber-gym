@@ -31,6 +31,25 @@ function beep() {
   }
 }
 
+/** préférence de l'appareil : lancer le repos automatiquement après chaque série validée */
+const AUTO_KEY = 'cg.rest.auto'
+export const restAutoStart = ref(readAuto())
+function readAuto() {
+  try {
+    return localStorage.getItem(AUTO_KEY) !== '0'
+  } catch {
+    return true
+  }
+}
+export function setRestAutoStart(on) {
+  restAutoStart.value = on
+  try {
+    localStorage.setItem(AUTO_KEY, on ? '1' : '0')
+  } catch {
+    /* ignore */
+  }
+}
+
 /**
  * Minuteur de repos basé sur une heure de fin (et non un décompte) :
  * il reste juste après un rechargement ou une mise en veille du téléphone.

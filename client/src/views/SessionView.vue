@@ -1,12 +1,12 @@
 <script setup>
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { CgButton, CgDialog, CgEmptyState, CgIcon, CgIconButton, CgIconTile, CgNumberField, CgSegments } from '../ds'
+import { CgButton, CgChip, CgDialog, CgEmptyState, CgIcon, CgIconButton, CgIconTile, CgNumberField, CgSegments } from '../ds'
 import ExercisePicker from '../components/ExercisePicker.vue'
 import SetDetailDialog from '../components/SetDetailDialog.vue'
 import { api, flushOutbox, hasPendingWrites } from '../lib/api'
-import { formatClock, formatDayDate, formatNumber, formatRest, formatShortDate, plural } from '../lib/format'
-import { useRestTimer } from '../lib/restTimer'
+import { REST_PRESETS, formatClock, formatDayDate, formatNumber, formatRest, formatShortDate, plural } from '../lib/format'
+import { restAutoStart, setRestAutoStart, useRestTimer } from '../lib/restTimer'
 import { toast } from '../lib/toast'
 
 const route = useRoute()
@@ -46,6 +46,12 @@ function openDetail(set) {
 const picker = ref(null)
 const now = ref(Date.now())
 const rest = useRestTimer(id)
+/** fenêtre de réglage du repos de l'exercice courant */
+const restEditor = ref(false)
+const restChoices = computed(() => {
+  const current = ex.value?.restSeconds ?? 0
+  return REST_PRESETS.includes(current) ? REST_PRESETS : [...REST_PRESETS, current].sort((a, b) => a - b)
+})
 /** charge pré-remplie de chaque série, pour savoir si l'utilisateur l'a modifiée */
 const prefilled = new Map()
 
@@ -167,7 +173,7 @@ function validate(set) {
   navigator.vibrate?.(30)
   persistSet(set)
   const lastOfSession = !nextEx.value && ex.value.sets.every((s) => s.doneAt)
-  if (!lastOfSession) rest.start(ex.value.restSeconds)
+  if (!lastOfSession && restAutoStart.value) rest.start(ex.value.restSeconds)
 }
 
 function toggle(set) {
@@ -245,6 +251,18 @@ async function removeExercise() {
   goTo(Math.min(exIndex.value, Math.max(0, exercises.value.length - 1)))
   try {
     await api.deleteSessionExercise(target.id)
+  } catch (err) {
+    toast(err, { tone: 'danger' })
+  }
+}
+
+async function setRest(seconds) {
+  const target = ex.value
+  if (target.restSeconds === seconds) return
+  target.restSeconds = seconds
+  if (!seconds) rest.skip()
+  try {
+    await api.setSessionExerciseRest(target.id, seconds)
   } catch (err) {
     toast(err, { tone: 'danger' })
   }
@@ -362,7 +380,7 @@ onBeforeUnmount(() => {
       <div class="exercise__text">
         <h1 class="t-display exercise__name">{{ ex.name }}</h1>
         <div class="exercise__goal">
-          Objectif : {{ plural(ex.targetSets, 'série') }} de {{ ex.targetReps }} rép. · repos {{ formatRest(ex.restSeconds) }}
+          Objectif : {{ plural(ex.targetSets, 'série') }} de {{ ex.targetReps }} rép. · {{ ex.restSeconds ? `repos ${formatRest(ex.restSeconds)}` : 'sans repos' }}
           <span v-if="isRecord" class="record"><CgIcon name="trophy" :size="16" /> Record</span>
         </div>
         <div v-if="prevSummary" class="exercise__prev">Séance précédente<template v-if="prevDateLabel"> ({{ prevDateLabel }})</template> : {{ prevSummary }}</div>
@@ -424,15 +442,22 @@ onBeforeUnmount(() => {
       <CgButton variant="ghost" size="s" icon="plus" class="sets__add" @click="addSet">Ajouter une série</CgButton>
     </section>
 
-    <div class="rest" :class="{ 'is-running': rest.running.value, 'is-over': rest.justFinished.value }" role="timer" aria-live="off">
-      <div class="rest__text">
-        <div class="t-label">Repos</div>
-        <div class="t-display rest__clock">
+    <div
+      v-if="ex.restSeconds || rest.running.value"
+      class="rest"
+      :class="{ 'is-running': rest.running.value, 'is-over': rest.justFinished.value }"
+      role="timer"
+      aria-live="off"
+    >
+      <button type="button" class="rest__text" :aria-label="`Repos de ${formatRest(ex.restSeconds)} — modifier`" @click="restEditor = true">
+        <span class="t-label rest__label">Repos<CgIcon name="pencil" :size="14" /></span>
+        <span class="t-display rest__clock">
           <template v-if="rest.running.value">{{ formatClock(rest.remaining.value) }}</template>
           <template v-else-if="rest.justFinished.value">Go !</template>
           <template v-else>{{ formatClock(ex.restSeconds) }}</template>
-        </div>
-      </div>
+        </span>
+        <span v-if="!rest.running.value && !rest.justFinished.value && !restAutoStart" class="rest__mode">lancement manuel</span>
+      </button>
       <div class="rest__actions">
         <template v-if="rest.running.value">
           <CgButton variant="secondary" size="s" @click="rest.add(30)">+ 30 s</CgButton>
@@ -440,6 +465,10 @@ onBeforeUnmount(() => {
         </template>
         <CgButton v-else variant="secondary" size="s" icon="clock" @click="rest.start(ex.restSeconds)">Lancer</CgButton>
       </div>
+    </div>
+    <div v-else class="rest rest--off">
+      <span class="t-label">Sans repos</span>
+      <CgButton variant="ghost" size="s" icon="clock" @click="restEditor = true">Définir un repos</CgButton>
     </div>
 
     </template>
@@ -469,6 +498,29 @@ onBeforeUnmount(() => {
         <CgButton variant="outline" size="m" icon="pencil" @click="correct(detailSet)">Corriger</CgButton>
       </template>
     </SetDetailDialog>
+
+    <CgDialog
+      :open="restEditor"
+      title="Temps de repos"
+      :description="ex ? `Entre les séries de ${ex.name}.` : null"
+      @close="restEditor = false"
+    >
+      <div v-if="ex" class="stack stack--s">
+        <div class="rest-choices" role="group" aria-label="Durée du repos">
+          <CgChip v-for="s in restChoices" :key="s" :pressed="ex.restSeconds === s" @click="setRest(s)">
+            {{ s ? formatRest(s) : 'Sans repos' }}
+          </CgChip>
+        </div>
+        <div class="t-label rest-choices__title">Après chaque série validée</div>
+        <div class="rest-choices" role="group" aria-label="Lancement du minuteur">
+          <CgChip :pressed="restAutoStart" @click="setRestAutoStart(true)">Lancer le repos</CgChip>
+          <CgChip :pressed="!restAutoStart" @click="setRestAutoStart(false)">Ne rien lancer</CgChip>
+        </div>
+      </div>
+      <template #actions>
+        <CgButton size="m" @click="restEditor = false">OK</CgButton>
+      </template>
+    </CgDialog>
 
     <CgDialog
       :open="confirmRemove"
@@ -609,7 +661,13 @@ onBeforeUnmount(() => {
   background: var(--color-surface);
   border: var(--border-w) solid var(--color-border);
 }
-.rest__text { display: flex; flex-direction: column; }
+.rest__text { display: flex; flex-direction: column; align-items: flex-start; padding: 0; background: none; border: 0; color: inherit; text-align: left; cursor: pointer; }
+.rest__label { display: inline-flex; align-items: center; gap: 6px; }
+.rest__mode { font-size: var(--fs-body-s); color: var(--color-text-muted); }
+.rest--off { padding-block: var(--space-2); border-style: dashed; }
+.rest-choices { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.rest-choices :deep(.cg-chip) { height: 40px; padding-inline: 14px; }
+.rest-choices__title { margin-top: var(--space-2); }
 .rest__clock { font-size: var(--fs-timer); line-height: 1; color: var(--color-text-muted); font-variant-numeric: tabular-nums; }
 .rest.is-running .rest__clock,
 .rest.is-over .rest__clock { color: var(--color-info); text-shadow: 0 0 18px rgb(var(--rgb-cyan) / 0.6); }

@@ -77,4 +77,7 @@ export function formatRest(seconds) {
   return s ? `${m} min ${s}` : `${m} min`
 }
 
+/** durées de repos proposées (secondes) ; 0 = sans repos */
+export const REST_PRESETS = [0, 30, 45, 60, 75, 90, 120, 150, 180, 240, 300]
+
 export const plural = (n, one, many = `${one}s`) => `${formatInt(n)} ${n > 1 ? many : one}`

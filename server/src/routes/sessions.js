@@ -224,6 +224,18 @@ export default function sessionsRouter(db) {
     res.status(201).json(d.exercises.find((e) => e.id === newId))
   })
 
+  // Modifie le temps de repos d'un exercice de séance (0 = sans repos)
+  r.patch('/session-exercises/:id', async (req, res) => {
+    const { rows } = await db.query(
+      `UPDATE session_exercises se SET rest_seconds = $3 FROM sessions s
+       WHERE se.id = $1 AND s.id = se.session_id AND s.user_id = $2
+       RETURNING se.id, se.rest_seconds AS "restSeconds"`,
+      [uuid(req.params.id), req.user.id, int(req.body?.restSeconds, 'Repos', { min: 0, max: 900 })],
+    )
+    if (!rows[0]) throw new HttpError(404, 'Exercice de séance introuvable')
+    res.json(rows[0])
+  })
+
   r.delete('/session-exercises/:id', async (req, res) => {
     await db.query(
       `DELETE FROM session_exercises se USING sessions s

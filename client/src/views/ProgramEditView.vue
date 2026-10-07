@@ -7,7 +7,7 @@ import {
 } from '../ds'
 import ExercisePicker from '../components/ExercisePicker.vue'
 import { api } from '../lib/api'
-import { WEEKDAYS, formatRest } from '../lib/format'
+import { REST_PRESETS, WEEKDAYS, formatRest } from '../lib/format'
 import { muscleLabel } from '../lib/muscles'
 import { toast } from '../lib/toast'
 
@@ -25,7 +25,7 @@ const picker = ref(null)
 let uid = 0
 
 const DAY_OPTIONS = [{ value: null, label: 'Pas de jour fixe' }, ...WEEKDAYS.map((label, i) => ({ value: i + 1, label }))]
-const REST_OPTIONS = [0, 30, 45, 60, 75, 90, 120, 150, 180, 240, 300].map((s) => ({ value: s, label: formatRest(s) }))
+const REST_OPTIONS = REST_PRESETS.map((s) => ({ value: s, label: s ? formatRest(s) : 'Sans repos' }))
 
 const valid = computed(() => form.name.trim() && form.exercises.every((e) => e.sets > 0 && e.reps > 0))
 const presentIds = computed(() => form.exercises.map((e) => e.exerciseId))
